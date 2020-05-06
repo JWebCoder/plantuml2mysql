@@ -1,0 +1,31 @@
+{
+  "name": "plantuml2mysql",
+  "version": "0.0.1",
+  "description": "parse plantuml to mysql",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "jest --coverage",
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JWebCoder/plantuml2mysql.git"
+  },
+  "keywords": [
+    "plantuml"
+  ],
+  "author": "João Moura <joao87moura@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/JWebCoder/plantuml2mysql/issues"
+  },
+  "homepage": "https://github.com/JWebCoder/plantuml2mysql#readme",
+  "devDependencies": {
+    "@types/jest": "^25.2.1",
+    "@types/node": "^13.13.5",
+    "jest": "^26.0.1",
+    "ts-jest": "^25.4.0",
+    "tslint": "^6.1.2",
+    "typescript": "^3.8.3"
+  }
+}

@@ -68,7 +68,7 @@ plantuml2mysql('./database.md').then(
 @enduml
 ```
 
-![diagram](./assets/diagram.png)
+![diagram](./assets/dbdiagram.png)
 
 ## Column structure
 

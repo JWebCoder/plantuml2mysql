@@ -2,38 +2,55 @@ import parseFile from '../src/index'
 
 const wantedResult = `
 CREATE TABLE IF NOT EXISTS Cart (
-id INT AUTO_INCREMENT PRIMARY KEY,
+id INT AUTO_INCREMENT,
 userId INT,
-FOREIGN KEY (userId) REFERENCES User(id)
+timestamp TIMESTAMP,
+PRIMARY KEY (id),
+FOREIGN KEY (userId) REFERENCES User(id),
+UNIQUE KEY \`idx_Cart_userId\` (userId)
 )  ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS CartIngredientList (
-cartId INT PRIMARY KEY,
-ingredientId INT PRIMARY KEY,
+cartId INT,
+ingredientId INT,
 quantity TINYINT,
-checked DEFAULT(false),
+later BOOLEAN DEFAULT 1,
+checked BOOLEAN DEFAULT 0,
+PRIMARY KEY (cartId,ingredientId),
 FOREIGN KEY (cartId) REFERENCES Cart(id),
 FOREIGN KEY (ingredientId) REFERENCES Ingredient(id)
 )  ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS Ingredient (
-id INT AUTO_INCREMENT PRIMARY KEY,
-name UNIQUE
+id INT AUTO_INCREMENT,
+name VARCHAR(70),
+PRIMARY KEY (id),
+UNIQUE KEY \`idx_Ingredient_name\` (name)
 )  ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS User (
-id INT AUTO_INCREMENT PRIMARY KEY,
-roleId INT,
-name VARCHAR(70),
+id INT AUTO_INCREMENT,
+roleId INT DEFAULT 0,
+name VARCHAR(70) DEFAULT 'Joao',
 age SMALLINT,
-email UNIQUE,
+dateOfBirth DATE,
+email VARCHAR(320),
 gender TINYINT,
-FOREIGN KEY (roleId) REFERENCES Role(id)
+floatField FLOAT,
+doubleField DOUBLE,
+PRIMARY KEY (id),
+FOREIGN KEY (roleId) REFERENCES Role(id),
+UNIQUE KEY \`idx_User_email\` (email)
 )  ENGINE=INNODB;
 
 CREATE TABLE IF NOT EXISTS Role (
-id INT AUTO_INCREMENT PRIMARY KEY,
-name VARCHAR(20)
+id INT AUTO_INCREMENT,
+name VARCHAR(20),
+PRIMARY KEY (id)
+)  ENGINE=INNODB;
+
+CREATE TABLE IF NOT EXISTS NoPrimaryKeyTable (
+parameter INT
 )  ENGINE=INNODB;
 `
 

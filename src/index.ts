@@ -13,6 +13,8 @@ interface ITableColumn {
   'NOT NULL'?: boolean,
   ref?: IColRef,
   type?: string,
+  default?: string,
+  unique?: boolean,
   AUTO_INCREMENT?: boolean
 }
 
@@ -30,6 +32,31 @@ interface IUML {
 
 function getType(ref: IColRef, uml: IUML) {
   return uml[ref.table].columns[ref.col].type
+}
+
+function getDefaultValue(columnData: ITableColumn) {
+  const columnType = columnData.type
+  return columnData.default
+    ? columnType
+      && (
+        (
+          (
+            columnType.indexOf('INT') >= 0
+            || columnType.startsWith('DOUBLE')
+            || columnType.startsWith('FLOAT')
+            || columnType.startsWith('DECIMAL')
+            || columnType === 'DATE'
+            || columnType === 'TIMESTAMP'
+          )
+          && ' DEFAULT ' + columnData.default
+        )
+        || (
+          columnType === 'BOOLEAN'
+          && ' DEFAULT ' + (columnData.default === 'true' ? 1 : 0)
+        )
+        ||" DEFAULT '" + columnData.default + "'"
+      )
+    : ''
 }
 
 export default function parseFile(filePath: string) {
@@ -94,12 +121,16 @@ export default function parseFile(filePath: string) {
                   currentColumn['NOT NULL'] = true
                 } else if (colData === 'AUTO_INCREMENT') {
                   currentColumn.AUTO_INCREMENT = true
+                } else if (colData === 'UNIQUE') {
+                  currentColumn.unique = true
                 } else if (colData.startsWith('REF(')) {
                   const ref = colData.slice(4, -1).split('.')
                   currentColumn.ref = {
                     table: ref[0].charAt(0).toUpperCase() + ref[0].slice(1),
                     col: ref[1],
                   }
+                } else if (colData.startsWith('DEFAULT(')) {
+                  currentColumn.default = colData.slice(8, -1)
                 } else {
                   currentColumn.type = colData
                 }
@@ -122,6 +153,8 @@ export default function parseFile(filePath: string) {
       tables.forEach(
         (tableName) => {
           const foreignKeys: string[] = []
+          const primaryKeys: string[] = []
+          const uniqueIndexes: string[] = []
           const columnLines: string[] = []
           createStatement += `\nCREATE TABLE IF NOT EXISTS ${tableName} (`
           const columns = uml[tableName].columns
@@ -133,14 +166,26 @@ export default function parseFile(filePath: string) {
                 columnData.type = getType(columnData.ref, uml)
                 foreignKeys.push(`FOREIGN KEY (${columnData.name}) REFERENCES ${columnData.ref.table}(${columnData.ref.col})`)
               }
-              columnLines.push(`${columnName} ${columnData.type}${columnData.AUTO_INCREMENT && ' AUTO_INCREMENT' || ''}${columnData.isPk && ' PRIMARY KEY' || ''}`)
+              if (columnData.isPk) {
+                primaryKeys.push(columnName)
+              }
+              if (columnData.unique) {
+                uniqueIndexes.push(`UNIQUE KEY \`idx_${tableName}_${columnName}\` (${columnName})`)
+              }
+              columnLines.push(`${columnName} ${columnData.type}${getDefaultValue(columnData)}${columnData.AUTO_INCREMENT && ' AUTO_INCREMENT' || ''}`)
             }
           )
           
           createStatement += `\n${columnLines.join(',\n')}`
 
+          if (primaryKeys.length) {
+            createStatement += `,\nPRIMARY KEY (${primaryKeys.join(',')})`
+          }
           if (foreignKeys.length) {
             createStatement += `,\n${foreignKeys.join(',\n')}`
+          }
+          if (uniqueIndexes.length) {
+            createStatement += `,\n${uniqueIndexes.join(',\n')}`
           }
           createStatement += `\n)  ENGINE=INNODB;\n`
         }

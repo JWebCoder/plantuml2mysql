@@ -183,6 +183,11 @@ export default function parseFile(filePath: string) {
       }
     });
 
+    rl.on("error", (reason) => {
+      console.log('Error: ', reason);
+      return rej(reason);
+    });
+    
     rl.on("close", () => {
       res(JSONUML);
     });

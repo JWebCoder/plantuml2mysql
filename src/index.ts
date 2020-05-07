@@ -181,10 +181,6 @@ export default function parseFile(filePath: string) {
       }
     })
 
-    rl.on('error', (reason) => {
-      return rej(reason)
-    })
-
     rl.on('close', () => {
       res(JSONUML)
     })

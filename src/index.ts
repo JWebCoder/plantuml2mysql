@@ -18,7 +18,7 @@ interface ITableColumn {
 }
 
 interface ITableObject {
-  tableName: string
+  name: string
   pkList: string[]
   columns: {
     [key: string]: ITableColumn;
@@ -50,17 +50,24 @@ function getDefaultValue(columnData: ITableColumn) {
     : ''
 }
 
+function defaultTableObject (name: string): ITableObject {
+  return {
+    pkList: [],
+    name,
+    columns: {},
+  }
+}
+
 function UMLToMySQL(uml: IUML) {
   let createStatement = ''
-  const tables = Object.keys(uml)
-  tables.forEach((tableName) => {
+  const tables = Object.values(uml)
+  tables.forEach((table) => {
     const foreignKeys: string[] = []
-    const primaryKeys: string[] = []
     const uniqueIndexes: string[] = []
     const columnLines: string[] = []
-    const columns = Object.values(uml[tableName].columns)
+    const columns = Object.values(table.columns)
 
-    createStatement += `\nCREATE TABLE IF NOT EXISTS ${tableName} (`
+    createStatement += `\nCREATE TABLE IF NOT EXISTS ${table.name} (`
 
     columns.forEach((column) => {
       if (column.ref) {
@@ -69,12 +76,9 @@ function UMLToMySQL(uml: IUML) {
           `FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
         )
       }
-      if (column.isPk) {
-        primaryKeys.push(column.name)
-      }
       if (column.unique) {
         uniqueIndexes.push(
-          `UNIQUE KEY \`idx_${tableName}_${column.name}\` (${column.name})`
+          `UNIQUE KEY \`idx_${table.name}_${column.name}\` (${column.name})`
         )
       }
       columnLines.push(
@@ -86,8 +90,8 @@ function UMLToMySQL(uml: IUML) {
 
     createStatement += `\n${columnLines.join(',\n')}`
 
-    if (primaryKeys.length) {
-      createStatement += `,\nPRIMARY KEY (${primaryKeys.join(',')})`
+    if (table.pkList.length) {
+      createStatement += `,\nPRIMARY KEY (${table.pkList.join(',')})`
     }
     if (foreignKeys.length) {
       createStatement += `,\n${foreignKeys.join(',\n')}`
@@ -114,42 +118,34 @@ export default function parseFile(filePath: string) {
     })
 
     rl.on('line', (input) => {
+      input = input.trim()
       if (!isUML && input.startsWith('@startuml')) {
         isUML = true
         return
       }
       if (isUML) {
-        input = input.trim()
-
         if (!isTable && input.startsWith('class')) {
           isTable = true
           const tableName = input.split(' ')[1]
-          currentTableObject = {
-            pkList: [],
-            tableName,
-            columns: {},
-          }
+          currentTableObject = defaultTableObject(tableName)
           JSONUML[tableName] = currentTableObject
           return
-        }
-
-        if (isTable && input !== '}') {
-          const tableColData = input.split(' ')
-          tableColData.forEach((colData, index) => {
-            let colName = colData
+        } else if (isTable && input !== '}') {
+          input.split(' ').forEach((columnData, index) => {
+            let colName = columnData
             if (index === 0) {
-              if (colData[0] === '#' || colData[0] === '+') {
-                colName = colData.substr(1)
+              if (columnData[0] === '#' || columnData[0] === '+') {
+                colName = columnData.substr(1)
                 currentTableObject.pkList.push(colName)
                 currentColumn = {
                   name: colName,
                   isPk: true,
                 }
-              } else if (colData === '..') {
+              } else if (columnData === '..') {
                 return
               } else {
-                if (colData[0] === '-') {
-                  colName = colData.substr(1)
+                if (columnData[0] === '-') {
+                  colName = columnData.substr(1)
                 }
                 currentColumn = {
                   name: colName,
@@ -157,22 +153,22 @@ export default function parseFile(filePath: string) {
                 }
               }
               currentTableObject.columns[colName] = currentColumn
-            } else if (colData === 'NN') {
+            } else if (columnData === 'NN') {
               currentColumn['NOT NULL'] = true
-            } else if (colData === 'AUTO_INCREMENT') {
+            } else if (columnData === 'AUTO_INCREMENT') {
               currentColumn.AUTO_INCREMENT = true
-            } else if (colData === 'UNIQUE') {
+            } else if (columnData === 'UNIQUE') {
               currentColumn.unique = true
-            } else if (colData.startsWith('REF(')) {
-              const ref = colData.slice(4, -1).split('.')
+            } else if (columnData.startsWith('REF(')) {
+              const ref = columnData.slice(4, -1).split('.')
               currentColumn.ref = {
                 table: ref[0].charAt(0).toUpperCase() + ref[0].slice(1),
                 col: ref[1],
               }
-            } else if (colData.startsWith('DEFAULT(')) {
-              currentColumn.default = colData.slice(8, -1)
+            } else if (columnData.startsWith('DEFAULT(')) {
+              currentColumn.default = columnData.slice(8, -1)
             } else {
-              currentColumn.type = colData
+              currentColumn.type = columnData
             }
           })
         } else if (isTable && input === '}') {

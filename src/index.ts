@@ -1,5 +1,8 @@
 import fs from 'fs'
 import readline from 'readline'
+import debug from 'debug'
+
+const logger = debug('*')
 
 interface IColRef {
   table: string
@@ -8,7 +11,8 @@ interface IColRef {
 
 interface ITableColumn {
   name: string
-  isPk?: boolean
+  isPk: boolean
+  isFK: boolean
   'NOT NULL'?: boolean
   ref?: IColRef
   type?: string
@@ -27,6 +31,18 @@ interface ITableObject {
 
 interface IUML {
   [key: string]: ITableObject
+}
+
+function relationTablesExists(ref: IColRef, columnName:string, tableName: string, uml: IUML) {
+  if (!uml[ref.table]) {
+    logger(`The \x1b[1m${ref.table}.${ref.col}\x1b[0m on table \x1b[1m${tableName}\x1b[0m column \x1b[1m${columnName}\x1b[0m reference is incorrect, table \x1b[1m${ref.table}\x1b[0m doesn't exists`)
+    return false
+  }
+  if (!uml[ref.table].columns[ref.col]) {
+    logger(`The \x1b[1m${ref.table}.${ref.col}\x1b[0m on table \x1b[1m${tableName}\x1b[0m column \x1b[1m${columnName}\x1b[0m reference is incorrect, column \x1b[1m${ref.col}\x1b[0m on table \x1b[1m${ref.table}\x1b[0m doesn't exists`)
+    return false
+  }
+  return true
 }
 
 function getType(ref: IColRef, uml: IUML) {
@@ -70,7 +86,7 @@ function UMLToMySQL(uml: IUML) {
     createStatement += `\nCREATE TABLE IF NOT EXISTS ${table.name} (`
 
     columns.forEach((column) => {
-      if (column.ref) {
+      if (column.ref && relationTablesExists(column.ref, column.name, table.name, uml)) {
         column.type = getType(column.ref, uml)
         foreignKeys.push(
           `FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
@@ -140,6 +156,7 @@ export default function parseFile(filePath: string) {
                 currentColumn = {
                   name: colName,
                   isPk: true,
+                  isFK: columnData[0] === '+',
                 }
               } else if (columnData === '..') {
                 return
@@ -150,6 +167,7 @@ export default function parseFile(filePath: string) {
                 currentColumn = {
                   name: colName,
                   isPk: false,
+                  isFK: true,
                 }
               }
               currentTableObject.columns[colName] = currentColumn
@@ -162,13 +180,18 @@ export default function parseFile(filePath: string) {
             } else if (columnData.startsWith('REF(')) {
               const ref = columnData.slice(4, -1).split('.')
               currentColumn.ref = {
-                table: ref[0].charAt(0).toUpperCase() + ref[0].slice(1),
+                table: ref[0],
                 col: ref[1],
               }
             } else if (columnData.startsWith('DEFAULT(')) {
               currentColumn.default = columnData.slice(8, -1)
             } else {
-              currentColumn.type = columnData
+              if (!currentColumn.type && index === 1) {
+                currentColumn.type = columnData
+              } else {
+                logger(`Unable to process parameter \x1b[1m${columnData}\x1b[0m
+if it's a data type it should be the second item on the column definition` )
+              }
             }
           })
         } else if (isTable && input === '}') {

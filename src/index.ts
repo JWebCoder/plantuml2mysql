@@ -67,10 +67,9 @@ export default function parseFile(filePath: string) {
       let currentTableObject: ITableObject
       let currentColumn: ITableColumn
       let JSONUML: IUML = {}
-      const fullPath = path.join(__dirname, filePath)
 
       const rl = readline.createInterface({
-        input: fs.createReadStream(fullPath)
+        input: fs.createReadStream(filePath)
       })
 
       rl.on('line', (input) => {

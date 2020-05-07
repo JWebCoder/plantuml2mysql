@@ -1,4 +1,5 @@
 import parseFile from '../src/index'
+import path from 'path'
 
 const wantedResult = `
 CREATE TABLE IF NOT EXISTS Cart (
@@ -57,7 +58,7 @@ parameter INT
 describe('Parser tests', () => {
 
   it('it should parse the file line by line', (done) => {
-    parseFile('../database.md').then(
+    parseFile(path.join(__dirname, '../database.md')).then(
       (result) => {
         expect(result).toEqual(wantedResult)
         done()

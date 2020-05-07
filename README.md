@@ -11,7 +11,7 @@ npm i plantuml2mysql
 import plantuml2mysql from 'plantuml2mysql'
 import fs from 'fs'
 
-plantuml2mysql('./database.md').then(
+plantuml2mysql(path.join(__dirname, './database.md')).then(
   (result) => {
     fs.writeFileSync('./database.sql', result)
   }

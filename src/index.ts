@@ -58,28 +58,28 @@ function UMLToMySQL(uml: IUML) {
     const primaryKeys: string[] = []
     const uniqueIndexes: string[] = []
     const columnLines: string[] = []
+    const columns = Object.values(uml[tableName].columns)
+
     createStatement += `\nCREATE TABLE IF NOT EXISTS ${tableName} (`
-    const columns = uml[tableName].columns
-    const columnKeys = Object.keys(uml[tableName].columns)
-    columnKeys.forEach((columnName) => {
-      const columnData = columns[columnName]
-      if (columnData.ref) {
-        columnData.type = getType(columnData.ref, uml)
+
+    columns.forEach((column) => {
+      if (column.ref) {
+        column.type = getType(column.ref, uml)
         foreignKeys.push(
-          `FOREIGN KEY (${columnData.name}) REFERENCES ${columnData.ref.table}(${columnData.ref.col})`
+          `FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
         )
       }
-      if (columnData.isPk) {
-        primaryKeys.push(columnName)
+      if (column.isPk) {
+        primaryKeys.push(column.name)
       }
-      if (columnData.unique) {
+      if (column.unique) {
         uniqueIndexes.push(
-          `UNIQUE KEY \`idx_${tableName}_${columnName}\` (${columnName})`
+          `UNIQUE KEY \`idx_${tableName}_${column.name}\` (${column.name})`
         )
       }
       columnLines.push(
-        `${columnName} ${columnData.type}${getDefaultValue(columnData)}${
-          (columnData.AUTO_INCREMENT && ' AUTO_INCREMENT') || ''
+        `${column.name} ${column.type}${getDefaultValue(column)}${
+          (column.AUTO_INCREMENT && ' AUTO_INCREMENT') || ''
         }`
       )
     })

@@ -2,17 +2,17 @@
 @startuml database diagram
   class Cart {
     #id INT AUTO_INCREMENT
-    -userId UNIQUE REF(user.id)
+    -userId UNIQUE REF(User.id)
     timestamp TIMESTAMP
   }
 
   class CartIngredientList {
-    +cartId REF(cart.id)
-    +ingredientId REF(ingredient.id)
+    +cartId REF(Cart.id)
+    +ingredientId REF(Ingredient.id) UNKNOWN
     ..
     quantity TINYINT NN
-    later BOOLEAN DEFAULT(true)
-    checked BOOLEAN NN DEFAULT(false)
+    later BOOLEAN DEFAULT(true) REF(Cart.Id)
+    checked BOOLEAN NN DEFAULT(false) REF(cart.id)
   }
 
   class Ingredient {
@@ -23,7 +23,7 @@
   
   class User {
     #id INT AUTO_INCREMENT
-    -roleId NN DEFAULT(0) REF(role.id)
+    -roleId NN DEFAULT(0) REF(Role.id)
     ..
     name VARCHAR(70) NN DEFAULT(Joao)
     age SMALLINT

@@ -1,33 +1,48 @@
-import path from 'path'
 import fs from 'fs'
 import readline from 'readline'
+import debug from 'debug'
+
+const logger = debug('*')
 
 interface IColRef {
-  table: string,
-  col: string,
+  table: string
+  col: string
 }
 
 interface ITableColumn {
-  name: string,
-  isPk?: boolean,
-  'NOT NULL'?: boolean,
-  ref?: IColRef,
-  type?: string,
-  default?: string,
-  unique?: boolean,
+  name: string
+  isPk: boolean
+  isFK: boolean
+  'NOT NULL'?: boolean
+  ref?: IColRef
+  type?: string
+  default?: string
+  unique?: boolean
   AUTO_INCREMENT?: boolean
 }
 
-interface ITableObject{
-  tableName: string,
-  pkList: string[],
+interface ITableObject {
+  name: string
+  pkList: string[]
   columns: {
-    [key: string]: ITableColumn,
+    [key: string]: ITableColumn;
   }
 }
 
 interface IUML {
-  [key: string]: ITableObject,
+  [key: string]: ITableObject
+}
+
+function relationTablesExists(ref: IColRef, columnName:string, tableName: string, uml: IUML) {
+  if (!uml[ref.table]) {
+    logger(`The \x1b[1m${ref.table}.${ref.col}\x1b[0m on table \x1b[1m${tableName}\x1b[0m column \x1b[1m${columnName}\x1b[0m reference is incorrect, table \x1b[1m${ref.table}\x1b[0m doesn't exists`)
+    return false
+  }
+  if (!uml[ref.table].columns[ref.col]) {
+    logger(`The \x1b[1m${ref.table}.${ref.col}\x1b[0m on table \x1b[1m${tableName}\x1b[0m column \x1b[1m${columnName}\x1b[0m reference is incorrect, column \x1b[1m${ref.col}\x1b[0m on table \x1b[1m${ref.table}\x1b[0m doesn't exists`)
+    return false
+  }
+  return true
 }
 
 function getType(ref: IColRef, uml: IUML) {
@@ -37,159 +52,158 @@ function getType(ref: IColRef, uml: IUML) {
 function getDefaultValue(columnData: ITableColumn) {
   const columnType = columnData.type
   return columnData.default
-    ? columnType
-      && (
-        (
-          (
-            columnType.indexOf('INT') >= 0
-            || columnType.startsWith('DOUBLE')
-            || columnType.startsWith('FLOAT')
-            || columnType.startsWith('DECIMAL')
-            || columnType === 'DATE'
-            || columnType === 'TIMESTAMP'
-          )
-          && ' DEFAULT ' + columnData.default
-        )
-        || (
-          columnType === 'BOOLEAN'
-          && ' DEFAULT ' + (columnData.default === 'true' ? 1 : 0)
-        )
-        ||" DEFAULT '" + columnData.default + "'"
-      )
+    ? columnType &&
+        (((columnType.indexOf('INT') >= 0 ||
+          columnType.startsWith('DOUBLE') ||
+          columnType.startsWith('FLOAT') ||
+          columnType.startsWith('DECIMAL') ||
+          columnType === 'DATE' ||
+          columnType === 'TIMESTAMP') &&
+          ' DEFAULT ' + columnData.default) ||
+          (columnType === 'BOOLEAN' &&
+            ' DEFAULT ' + (columnData.default === 'true' ? 1 : 0)) ||
+          " DEFAULT '" + columnData.default + "'")
     : ''
 }
 
+function defaultTableObject (name: string): ITableObject {
+  return {
+    pkList: [],
+    name,
+    columns: {},
+  }
+}
+
+function UMLToMySQL(uml: IUML) {
+  let createStatement = ''
+  const tables = Object.values(uml)
+  tables.forEach((table) => {
+    const foreignKeys: string[] = []
+    const uniqueIndexes: string[] = []
+    const columnLines: string[] = []
+    const columns = Object.values(table.columns)
+
+    createStatement += `\nCREATE TABLE IF NOT EXISTS ${table.name} (`
+
+    columns.forEach((column) => {
+      if (column.ref && relationTablesExists(column.ref, column.name, table.name, uml)) {
+        column.type = getType(column.ref, uml)
+        foreignKeys.push(
+          `FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
+        )
+      }
+      if (column.unique) {
+        uniqueIndexes.push(
+          `UNIQUE KEY \`idx_${table.name}_${column.name}\` (${column.name})`
+        )
+      }
+      columnLines.push(
+        `${column.name} ${column.type}${getDefaultValue(column)}${
+          (column.AUTO_INCREMENT && ' AUTO_INCREMENT') || ''
+        }`
+      )
+    })
+
+    createStatement += `\n${columnLines.join(',\n')}`
+
+    if (table.pkList.length) {
+      createStatement += `,\nPRIMARY KEY (${table.pkList.join(',')})`
+    }
+    if (foreignKeys.length) {
+      createStatement += `,\n${foreignKeys.join(',\n')}`
+    }
+    if (uniqueIndexes.length) {
+      createStatement += `,\n${uniqueIndexes.join(',\n')}`
+    }
+    createStatement += `\n)  ENGINE=INNODB;\n`
+  })
+
+  return createStatement
+}
+
 export default function parseFile(filePath: string) {
-  return new Promise<IUML>(
-    (res, rej) => {
-      let isUML = false
-      let isTable = false
-      let currentTableObject: ITableObject
-      let currentColumn: ITableColumn
-      let JSONUML: IUML = {}
+  const convertPlantumlToUML = new Promise<IUML>((res, rej) => {
+    let isUML = false
+    let isTable = false
+    let currentTableObject: ITableObject
+    let currentColumn: ITableColumn
+    const JSONUML: IUML = {}
 
-      const rl = readline.createInterface({
-        input: fs.createReadStream(filePath)
-      })
+    const rl = readline.createInterface({
+      input: fs.createReadStream(filePath),
+    })
 
-      rl.on('line', (input) => {
-        if (!isUML && input.startsWith('@startuml')) {
-          isUML = true
+    rl.on('line', (input) => {
+      input = input.trim()
+      if (!isUML && input.startsWith('@startuml')) {
+        isUML = true
+        return
+      }
+      if (isUML) {
+        if (!isTable && input.startsWith('class')) {
+          isTable = true
+          const tableName = input.split(' ')[1]
+          currentTableObject = defaultTableObject(tableName)
+          JSONUML[tableName] = currentTableObject
           return
-        }
-        if (isUML) {
-          input = input.trim()
-          if (!isTable && input.startsWith('class')) {
-            isTable = true
-            const tableName = input.split(' ')[1]
-            currentTableObject = {
-              pkList: [],
-              tableName,
-              columns: {},
-            }
-            JSONUML[tableName] = currentTableObject
-            return
-          }
-          if (isTable && input !== '}') {
-            let tableColData = input.split(' ')
-            tableColData.forEach(
-              (colData, index) => {
-                let colName = colData
-                if (index === 0) {
-                  if (colData[0] === '#' || colData[0] === '+') {
-                    colName = colData.substr(1)
-                    currentTableObject.pkList.push(colName)
-                    currentColumn = {
-                      name: colName,
-                      isPk: true
-                    }
-                    
-                  } else if (colData === '..') {
-                    return
-                  } else {
-                    if (colData[0] === '-') {
-                      colName = colData.substr(1)
-                    }
-                    currentColumn = {
-                      name: colName,
-                      isPk: false
-                    }
-                  }
-                  currentTableObject.columns[colName] = currentColumn
-                } else if (colData === 'NN') {
-                  currentColumn['NOT NULL'] = true
-                } else if (colData === 'AUTO_INCREMENT') {
-                  currentColumn.AUTO_INCREMENT = true
-                } else if (colData === 'UNIQUE') {
-                  currentColumn.unique = true
-                } else if (colData.startsWith('REF(')) {
-                  const ref = colData.slice(4, -1).split('.')
-                  currentColumn.ref = {
-                    table: ref[0].charAt(0).toUpperCase() + ref[0].slice(1),
-                    col: ref[1],
-                  }
-                } else if (colData.startsWith('DEFAULT(')) {
-                  currentColumn.default = colData.slice(8, -1)
-                } else {
-                  currentColumn.type = colData
+        } else if (isTable && input !== '}') {
+          input.split(' ').forEach((columnData, index) => {
+            let colName = columnData
+            if (index === 0) {
+              if (columnData[0] === '#' || columnData[0] === '+') {
+                colName = columnData.substr(1)
+                currentTableObject.pkList.push(colName)
+                currentColumn = {
+                  name: colName,
+                  isPk: true,
+                  isFK: columnData[0] === '+',
+                }
+              } else if (columnData === '..') {
+                return
+              } else {
+                if (columnData[0] === '-') {
+                  colName = columnData.substr(1)
+                }
+                currentColumn = {
+                  name: colName,
+                  isPk: false,
+                  isFK: true,
                 }
               }
-            )
-          } else if (isTable && input === '}') {
-            isTable = false
-          }
-        }
-      })
-
-      rl.on('close', () => {
-        res(JSONUML)
-      })
-    }
-  ).then(
-    (uml) => {
-      let createStatement = ''
-      const tables = Object.keys(uml)
-      tables.forEach(
-        (tableName) => {
-          const foreignKeys: string[] = []
-          const primaryKeys: string[] = []
-          const uniqueIndexes: string[] = []
-          const columnLines: string[] = []
-          createStatement += `\nCREATE TABLE IF NOT EXISTS ${tableName} (`
-          const columns = uml[tableName].columns
-          const columnKeys = Object.keys(uml[tableName].columns)
-          columnKeys.forEach(
-            (columnName) => {
-              const columnData = columns[columnName]
-              if (columnData.ref) {
-                columnData.type = getType(columnData.ref, uml)
-                foreignKeys.push(`FOREIGN KEY (${columnData.name}) REFERENCES ${columnData.ref.table}(${columnData.ref.col})`)
+              currentTableObject.columns[colName] = currentColumn
+            } else if (columnData === 'NN') {
+              currentColumn['NOT NULL'] = true
+            } else if (columnData === 'AUTO_INCREMENT') {
+              currentColumn.AUTO_INCREMENT = true
+            } else if (columnData === 'UNIQUE') {
+              currentColumn.unique = true
+            } else if (columnData.startsWith('REF(')) {
+              const ref = columnData.slice(4, -1).split('.')
+              currentColumn.ref = {
+                table: ref[0],
+                col: ref[1],
               }
-              if (columnData.isPk) {
-                primaryKeys.push(columnName)
+            } else if (columnData.startsWith('DEFAULT(')) {
+              currentColumn.default = columnData.slice(8, -1)
+            } else {
+              if (!currentColumn.type && index === 1) {
+                currentColumn.type = columnData
+              } else {
+                logger(`Unable to process parameter \x1b[1m${columnData}\x1b[0m
+if it's a data type it should be the second item on the column definition` )
               }
-              if (columnData.unique) {
-                uniqueIndexes.push(`UNIQUE KEY \`idx_${tableName}_${columnName}\` (${columnName})`)
-              }
-              columnLines.push(`${columnName} ${columnData.type}${getDefaultValue(columnData)}${columnData.AUTO_INCREMENT && ' AUTO_INCREMENT' || ''}`)
             }
-          )
-          
-          createStatement += `\n${columnLines.join(',\n')}`
-
-          if (primaryKeys.length) {
-            createStatement += `,\nPRIMARY KEY (${primaryKeys.join(',')})`
-          }
-          if (foreignKeys.length) {
-            createStatement += `,\n${foreignKeys.join(',\n')}`
-          }
-          if (uniqueIndexes.length) {
-            createStatement += `,\n${uniqueIndexes.join(',\n')}`
-          }
-          createStatement += `\n)  ENGINE=INNODB;\n`
+          })
+        } else if (isTable && input === '}') {
+          isTable = false
         }
-      )
-      return createStatement
-    }
-  )
+      }
+    })
+
+    rl.on('close', () => {
+      res(JSONUML)
+    })
+  })
+
+  return convertPlantumlToUML.then((uml) => UMLToMySQL(uml))
 }

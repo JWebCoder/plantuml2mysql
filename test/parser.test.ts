@@ -58,7 +58,7 @@ parameter INT
 describe('Parser tests', () => {
 
   it('it should parse the file line by line', (done) => {
-    parseFile(path.join(__dirname, '../database.md')).then(
+    parseFile(path.join(__dirname, 'database.md')).then(
       (result) => {
         expect(result).toEqual(wantedResult)
         done()

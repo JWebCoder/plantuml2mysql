@@ -9,7 +9,7 @@ module.exports = {
   testMatch: ["**/?(*.)+(spec|test).[jt]s?(x)"],
   coveragePathIgnorePatterns: [
     "/node_modules/",
-    "/__tests__/",
+    "/test/",
   ],
   collectCoverage: true
 }

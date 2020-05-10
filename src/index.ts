@@ -2,7 +2,7 @@ import fs from 'fs'
 import readline from 'readline'
 import debug from 'debug'
 
-const logger = debug('*')
+const logger = debug('verbose')
 
 interface IColRef {
   table: string
@@ -16,6 +16,7 @@ interface ITableColumn {
   'NOT NULL'?: boolean
   ref?: IColRef
   type?: string
+  enum?: string,
   default?: string
   unique?: boolean
   AUTO_INCREMENT?: boolean
@@ -30,15 +31,20 @@ interface ITableObject {
 }
 
 interface IUML {
-  [key: string]: ITableObject
+  tables: {
+    [key: string]: ITableObject
+  },
+  enum: {
+    [key: string]: string[]
+  }
 }
 
 function relationTablesExists(ref: IColRef, columnName:string, tableName: string, uml: IUML) {
-  if (!uml[ref.table]) {
+  if (!uml.tables[ref.table]) {
     logger(`The \x1b[1m${ref.table}.${ref.col}\x1b[0m on table \x1b[1m${tableName}\x1b[0m column \x1b[1m${columnName}\x1b[0m reference is incorrect, table \x1b[1m${ref.table}\x1b[0m doesn't exists`)
     return false
   }
-  if (!uml[ref.table].columns[ref.col]) {
+  if (!uml.tables[ref.table].columns[ref.col]) {
     logger(`The \x1b[1m${ref.table}.${ref.col}\x1b[0m on table \x1b[1m${tableName}\x1b[0m column \x1b[1m${columnName}\x1b[0m reference is incorrect, column \x1b[1m${ref.col}\x1b[0m on table \x1b[1m${ref.table}\x1b[0m doesn't exists`)
     return false
   }
@@ -46,7 +52,7 @@ function relationTablesExists(ref: IColRef, columnName:string, tableName: string
 }
 
 function getType(ref: IColRef, uml: IUML) {
-  return uml[ref.table].columns[ref.col].type
+  return uml.tables[ref.table].columns[ref.col].type
 }
 
 function getDefaultValue(columnData: ITableColumn) {
@@ -76,7 +82,7 @@ function defaultTableObject (name: string): ITableObject {
 
 function UMLToMySQL(uml: IUML) {
   let createStatement = ''
-  const tables = Object.values(uml)
+  const tables = Object.values(uml.tables)
   tables.forEach((table) => {
     const foreignKeys: string[] = []
     const uniqueIndexes: string[] = []
@@ -86,7 +92,17 @@ function UMLToMySQL(uml: IUML) {
     createStatement += `\nCREATE TABLE IF NOT EXISTS ${table.name} (`
 
     columns.forEach((column) => {
-      if (column.ref && relationTablesExists(column.ref, column.name, table.name, uml)) {
+      if (column.enum && uml.enum) {
+        if (!uml.enum[column.enum]) {
+          logger(`Missing declaration for enum: \x1b[1m${column.enum}\x1b[0m`)
+          return
+        }
+        column.type = `ENUM('${uml.enum[column.enum].join("', '")}')`
+      }
+      if (column.ref) {
+        if (!relationTablesExists(column.ref, column.name, table.name, uml)) {
+          return
+        }
         column.type = getType(column.ref, uml)
         foreignKeys.push(
           `FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
@@ -125,9 +141,13 @@ export default function parseFile(filePath: string) {
   const convertPlantumlToUML = new Promise<IUML>((res, rej) => {
     let isUML = false
     let isTable = false
+    let nameENUM = ''
     let currentTableObject: ITableObject
     let currentColumn: ITableColumn
-    const JSONUML: IUML = {}
+    const JSONUML: IUML = {
+      tables: {},
+      enum: {},
+    }
 
     const rl = readline.createInterface({
       input: fs.createReadStream(filePath),
@@ -143,8 +163,13 @@ export default function parseFile(filePath: string) {
         if (!isTable && input.startsWith('class')) {
           isTable = true
           const tableName = input.split(' ')[1]
+          if (JSONUML.tables[tableName]) {
+            isTable = false
+            logger(`Duplicate declaration for table: \x1b[1m${tableName}\x1b[0m`)
+            return
+          }
           currentTableObject = defaultTableObject(tableName)
-          JSONUML[tableName] = currentTableObject
+          JSONUML.tables[tableName] = currentTableObject
           return
         } else if (isTable && input !== '}') {
           input.split(' ').forEach((columnData, index) => {
@@ -187,6 +212,9 @@ export default function parseFile(filePath: string) {
               currentColumn.default = columnData.slice(8, -1)
             } else {
               if (!currentColumn.type && index === 1) {
+                if (columnData.startsWith('ENUM(')) {
+                  currentColumn.enum = columnData.slice(5, -1)
+                }
                 currentColumn.type = columnData
               } else {
                 logger(`Unable to process parameter \x1b[1m${columnData}\x1b[0m
@@ -194,8 +222,23 @@ if it's a data type it should be the second item on the column definition` )
               }
             }
           })
-        } else if (isTable && input === '}') {
+        } else if (!nameENUM && input.startsWith('enum')) {
+          nameENUM = input.split(' ')[1]
+          if (JSONUML.enum[nameENUM]) {
+            logger(`Duplicate declaration for enum: \x1b[1m${nameENUM}\x1b[0m`)
+            nameENUM = ''
+            return
+          }
+          JSONUML.enum[nameENUM] = []
+          return
+        } else if (nameENUM && input !== '}') {
+          JSONUML.enum[nameENUM].push(input.trim())
+          return
+        }
+        else if (input === '}') {
           isTable = false
+          nameENUM = ''
+          return
         }
       }
     })

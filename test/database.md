@@ -11,8 +11,10 @@
     +ingredientId REF(Ingredient.id) UNKNOWN
     ..
     quantity TINYINT NN
-    later BOOLEAN DEFAULT(true) REF(Cart.Id)
-    checked BOOLEAN NN DEFAULT(false) REF(cart.id)
+    doubleChecked BOOLEAN NN DEFAULT(true)
+    checked BOOLEAN NN DEFAULT(false)
+    cartId2 REF(cart.id)
+    cartId3 REF(Cart.Id)
   }
 
   class Ingredient {
@@ -42,6 +44,14 @@
 
   class NoPrimaryKeyTable {
     parameter INT
+    field ENUM(ExampleEnum)
+  }
+
+  enum ExampleEnum {
+    entry1
+    data number 2
+    stuff really cool
+    entry3
   }
   
   User "0..*" o--o "1" Role

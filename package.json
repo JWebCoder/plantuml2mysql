@@ -1,6 +1,6 @@
 {
   "name": "plantuml2mysql",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "parse plantuml to mysql",
   "main": "lib/index.js",
   "scripts": {

@@ -10,6 +10,7 @@ npm i plantuml2mysql
 ```typescript
 import plantuml2mysql from 'plantuml2mysql'
 import fs from 'fs'
+import path from 'path'
 
 plantuml2mysql(path.join(__dirname, './database.md')).then(
   (result) => {

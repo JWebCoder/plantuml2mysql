@@ -1,5 +1,5 @@
 export default `
 CREATE TABLE IF NOT EXISTS NoPrimaryKeyTable (
-parameter INT
+\`parameter\` INT
 )  ENGINE=INNODB;
 `

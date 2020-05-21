@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import plantuml2mysql from './'
 import path from 'path'
 import fs from 'fs'

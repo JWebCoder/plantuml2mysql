@@ -1,8 +1,8 @@
 import fs from 'fs'
 import readline from 'readline'
-import debug from 'debug'
 
-const logger = debug('verbose')
+// tslint:disable-next-line: no-console
+const logger = console.log
 
 interface IColRef {
   table: string
@@ -83,8 +83,8 @@ function defaultTableObject (name: string): ITableObject {
 function UMLToMySQL(uml: IUML) {
   let createStatement = ''
   const tables = Object.values(uml.tables)
+  const foreignKeys: string[] = []
   tables.forEach((table) => {
-    const foreignKeys: string[] = []
     const uniqueIndexes: string[] = []
     const columnLines: string[] = []
     const columns = Object.values(table.columns)
@@ -105,7 +105,7 @@ function UMLToMySQL(uml: IUML) {
         }
         column.type = getType(column.ref, uml)
         foreignKeys.push(
-          `FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
+          `ALTER TABLE ${table.name} ADD CONSTRAINT fk_${table.name}_${column.name} FOREIGN KEY (${column.name}) REFERENCES ${column.ref.table}(${column.ref.col})`
         )
       }
       if (column.unique) {
@@ -114,7 +114,7 @@ function UMLToMySQL(uml: IUML) {
         )
       }
       columnLines.push(
-        `${column.name} ${column.type}${getDefaultValue(column)}${
+        `\`${column.name}\` ${column.type}${getDefaultValue(column)}${
           (column.AUTO_INCREMENT && ' AUTO_INCREMENT') || ''
         }`
       )
@@ -125,14 +125,15 @@ function UMLToMySQL(uml: IUML) {
     if (table.pkList.length) {
       createStatement += `,\nPRIMARY KEY (${table.pkList.join(',')})`
     }
-    if (foreignKeys.length) {
-      createStatement += `,\n${foreignKeys.join(',\n')}`
-    }
     if (uniqueIndexes.length) {
       createStatement += `,\n${uniqueIndexes.join(',\n')}`
     }
     createStatement += `\n)  ENGINE=INNODB;\n`
   })
+
+  if (foreignKeys.length) {
+    createStatement += '\n' + foreignKeys.join(';\n') + ';\n'
+  }
 
   return createStatement
 }

@@ -7,6 +7,12 @@ npm i plantuml2mysql
 
 ## Usage
 
+### Terminal
+
+`npx plantuml2mysql database.md database.sql`
+
+### By code
+
 ```typescript
 import plantuml2mysql from 'plantuml2mysql'
 import fs from 'fs'
